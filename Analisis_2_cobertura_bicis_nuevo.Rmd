@@ -1,0 +1,216 @@
+title: "Bicis_conectividad"
+author: "Leandro"
+date: "`r format(Sys.time(), '%d de %B, %Y')`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = FALSE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+### Objetivo
+
+_Relacionar  los radios de influencia de las bicisendas, estaciones y posición de los bicicleteros con cada parque._
+
+```{r cars}
+library(dplyr)     
+library(purrr)     
+library(ggplot2)   
+library(sf) 
+```
+
+```{r echo=FALSE, paged.print=FALSE}
+#acá ponen la ruta correspondiente al archivo en sus pcs
+parques_medianos <- read_sf("C:\\Users\\Usuario\\Desktop\\Fundacion Bunge y Born\\Accesibilidad a Espacios Verdes Rosario\\parques_medianos\\PARQUES MEDIANOS.shp") %>% 
+    st_transform(st_crs(4326)) 
+
+#ggplot() +
+ #  geom_sf(data = parques_medianos, fill = "forestgreen", colour = "forestgreen") +
+  #    labs(title = "Parques medianos") +  
+   #    theme_void() 
+```
+
+Sumamos las otras capas y mapeamos opcionalmente
+```{r echo=FALSE}
+#aca ponen la ruta correspondiente
+BufferCiclovias <- 
+  read_sf("C:\\Users\\Usuario\\Desktop\\Fundacion Bunge y Born\\Accesibilidad a Espacios Verdes Rosario\\PARQUES MEDIANOS BICIS\\INCIDENCIA CICLOVIAS\\INCIDENCIA CICLOVIAS.shp")%>% 
+  st_transform(4326)
+
+BicisPublicas <- 
+  read_sf("C:\\Users\\Usuario\\Desktop\\Fundacion Bunge y Born\\Accesibilidad a Espacios Verdes Rosario\\PARQUES MEDIANOS BICIS\\INCIDENCIA BICIS PUB\\INCIDENCIA BICIS PUB.shp")%>% 
+  st_transform(4326)
+
+Bicicleteros <-   
+  read_sf("C:\\Users\\Usuario\\Desktop\\Fundacion Bunge y Born\\Accesibilidad a Espacios Verdes Rosario\\PARQUES MEDIANOS BICIS\\BICICLETEROS\\bicicleteros.shp")%>% 
+  st_transform(4326)
+
+#ggplot(distritos) +
+    #geom_sf(aes(fill = DISTRITO), color = NA) +
+    #geom_sf(data = BicisPublicas, alpha = .5, fill = "wheat")+                     geom_sf(data = BufferCiclovias, alpha = .3, color = "wheat") +
+  #geom_sf(data = Bicicleteros, alpha = .5, fill = "wheat")+                     geom_sf(data = BufferCiclovias, alpha = .3, color = "wheat") +
+    #geom_sf(data = parques_medianos, fill = "forestgreen", color = "forestgreen") +
+ #labs(title = "Parques Medianos, Ciclovías, Estaciones de Bicis Públicas y Bicicleteros") +
+    #theme_void()
+```
+
+### Identificación de grado de conectividad - cobertura
+* Realizamos un índice que clasifica el grado de accesibilidad por parque:
+*  Cuando un parque se intersecta con el radio de influencia de una bicisenda, estacion de bici publica o bicicletero. (se realiza un etiquetado SI/NO)
+* Luego, se determina si el grado de conectividad es alto, medio, bajo o nulo, segun el número de intersecciones. 
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+int <- function(parques_medianos, BufferCiclovias){
+
+st_intersection(parques_medianos, BufferCiclovias)
+      }
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+#not-in
+`%notin%` <- Negate(`%in%`)
+```
+
+Interseccion de parques con ciclovía
+```{r message=FALSE, warning=FALSE, include=FALSE}
+intersecciones <- int(parques_medianos, BufferCiclovias)
+
+etiquetas <- c()
+for (int in intersecciones) 
+{
+  {
+  if(any(parques_medianos$osm_id %in% intersecciones$osm_id))
+  {
+    etiquetas <- c(etiquetas, "SI")
+   {
+    if(parques_medianos$osm_id %notin% intersecciones$osm_id)
+    {
+      etiquetas <- c(etiquetas, "NO")
+    }
+  }
+}
+  }
+}
+
+intersecciones_ciclovias <- cbind(intersecciones$osm_id, etiquetas, intersecciones$name) %>% as.data.frame() %>% mutate_if(is.factor, as.character) 
+
+intersecciones_ciclovias <- intersecciones_ciclovias %>% distinct(intersecciones_ciclovias$V1, .keep_all = TRUE)  
+    
+colnames(intersecciones_ciclovias)[colnames(intersecciones_ciclovias) == c("V1", "etiquetas", "V3", "V4")] <- c("osm_id", "ciclovias", "nombre", "")
+    
+    intersecciones_ciclovias$`intersecciones_ciclovias$V1` <- NULL
+
+ 
+```
+
+Intersección de parques con bicicleteros
+```{r}
+int2 <- function(parques_medianos, Bicicleteros){
+
+st_intersection(parques_medianos, Bicicleteros)
+      }
+```
+
+```{r}
+intersecciones_bici <- int2(parques_medianos, Bicicleteros$geometry)
+
+etiquetas2 <- c()
+for (int2 in intersecciones_bici) 
+{
+  {
+  if(any(parques_medianos$osm_id  %in% intersecciones_bici$osm_id))
+  {
+    etiquetas2 <- c(etiquetas2, "SI")
+   {
+    if(parques_medianos$osm_id  %in% intersecciones_bici$osm_id)
+    {
+      etiquetas2 <- c(etiquetas2, "NO")
+    }
+  }
+}
+  }
+}
+#aca me quedo con los valores unicos (intersecciones bicicleteros es la que corresponde)
+
+intersecciones_bicicleteros <- cbind(intersecciones_bici$osm_id, etiquetas2, intersecciones_bici$name) %>%as.data.frame()%>%
+  distinct(intersecciones_bicicleteros, V1, .keep_all = TRUE) %>%
+    mutate_if(is.factor, as.character)
+
+colnames(intersecciones_bicicleteros)[colnames(intersecciones_bicicleteros) == c("V1", "etiquetas2", "V3")] <- c("osm_id", "bicicletero", "nombre")
+```
+Intersecciones con estaciones de bicis públicas
+
+```{r}
+int3 <- function(parques_medianos, BicisPublicas){
+
+st_intersection(parques_medianos, BicisPublicas)
+      }
+```
+
+intersección con estaciones de bicis públicas
+```{r}
+intersecciones_est <- int3(parques_medianos, BicisPublicas)
+
+etiquetas3 <- c()
+for (int3 in intersecciones_est) 
+{
+  {
+  if(any(parques_medianos$osm_id %in% BicisPublicas))
+  {
+    etiquetas3 <- c(etiquetas3, "SI")
+   {
+    if( parques_medianos$osm_id %notin% BicisPublicas)
+    {
+      etiquetas3 <- c(etiquetas3, "NO")
+    }
+  }
+}
+  }  
+}
+
+intersecciones_estaciones <- cbind(intersecciones_est$id,intersecciones_est$osm_id, etiquetas2, intersecciones_est$name) %>% as.data.frame() %>% mutate_if(is.factor, as.character) %>%
+  distinct(intersecciones_bicicleteros, V1, .keep_all = TRUE) %>%
+    mutate_if(is.factor, as.character)
+
+colnames(intersecciones_estaciones)[colnames(intersecciones_estaciones) == c("V1", "etiquetas2", "V3")] <- c("osm_id", "estacion", "nombre")
+```
+
+```{r}
+tabla_intersecciones<- merge(intersecciones_bicicleteros, intersecciones_estaciones, by = "osm_id", all = TRUE , na.rm = FALSE)
+
+tabla_intersecciones<-merge(tabla_intersecciones, intersecciones_ciclovias, by = "osm_id", all = TRUE, na.rm = FALSE)  
+
+tabla_intersecciones <-merge(tabla_intersecciones, parques_medianos, by = "osm_id", all = TRUE, na.rm = FALSE) 
+
+tabla_intersecciones$bicicletero[is.na(tabla_intersecciones$bicicletero)] <- "NO"
+
+tabla_intersecciones$estacion[is.na(tabla_intersecciones$estacion)] <- "NO"
+
+tabla_intersecciones$ciclovias[is.na(tabla_intersecciones$ciclovias)] <- "NO"
+
+tabla_intersecciones <- unique(tabla_intersecciones, na.rm = FALSE) %>% select(nombre, bicicletero, estacion, ciclovias, osm_id) %>%  select(osm_id, everything())
+```
+
+```{r}
+tabla_intersecciones <- tabla_intersecciones %>% 
+  mutate(grad_conec = case_when(
+    bicicletero == "SI" & estacion == "SI" & ciclovias == "SI" ~ "BUENA",
+    bicicletero == "NO" & estacion == "SI" & ciclovias == "SI" ~ "BUENA",
+    bicicletero == "SI" & estacion == "NO" & ciclovias == "SI" ~ "MEDIA",
+    bicicletero == "NO" & estacion == "NO" & ciclovias == "SI" ~ "MEDIA",
+    bicicletero == "SI" & estacion == "SI" & ciclovias == "NO" ~ "BAJA",
+    bicicletero == "NO" & estacion == "SI" & ciclovias == "NO" ~ "BAJA",
+    TRUE ~ "NULA"
+  )
+)
+
+#si quisieran exportar esta tabla como csv va el script
+#write.csv(tabla_intersecciones, "C:\\Users\\Usuario\\Desktop\\Fundacion Bunge y Born\\Accesibilidad a Espacios Verdes Rosario\\tabla_intersecciones.csv", sep = ",")
+```
+
+
+
